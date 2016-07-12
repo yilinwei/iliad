@@ -111,3 +111,34 @@ object Buffer {
     rewind(a.foldLeft(b)(put.apply))
   }
 }
+
+import scala.annotation._
+
+@implicitNotFound("Cannot find typed buffer for tagged type of $A")
+trait BufferTagged[A] {
+  type Out
+}
+
+object BufferTagged {
+  type Aux[A, B] = BufferTagged[A] { type Out = B }
+
+  implicit lazy val intBufferTagged: Aux[Int, IntBuffer] = new IntBufferTagged
+}
+
+private final class IntBufferTagged extends BufferTagged[Int] {
+  type Out = IntBuffer
+}
+
+/** Typed Buffer
+
+  * We have 3 issues
+  * 1) Reading from the file and putting into the buffer without individually reading pieces
+  * 2) Preserving the type information of what is within the buffer itself
+  *  b.toBuffer[Int] -> IntBuffer
+  */
+final class Buffer[A](repr: ByteBuffer, size: Long) {
+//  def toBuffer[B](implicit )
+//  def toBuffer[B]
+}
+
+//Ideally we want to put

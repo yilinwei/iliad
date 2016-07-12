@@ -43,3 +43,23 @@ object StateTExtra {
 object KleisliExtra {
   def lift[F[_], A, B](fb: F[B]): Kleisli[F, A, B] = Kleisli(_ => fb)
 }
+
+object MonadExtra {
+  implicit def monadExtraOps[F[_]: Monad, A](fa: F[A]): MonadExtraOps[F, A] = new MonadExtraOps(fa)
+}
+
+import cats.implicits._
+
+final class MonadExtraOps[F[_] : Monad, A](fa: F[A]) {
+  def <<[B](fb: F[B]): F[A] = for {
+    a <- fa
+    _ <- fb
+  } yield a
+}
+
+trait PartialFunctionK[F[_], G[_]] {
+  def apply[A](fa: F[A]): Option[G[A]]
+  def orElse(that: PartialFunctionK[F, G]): PartialFunctionK[F, G] = new PartialFunctionK[F, G] {
+    def apply[A](fa: F[A]): Option[G[A]] = this(fa).orElse(that(fa))
+  }
+}
