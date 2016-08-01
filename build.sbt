@@ -31,7 +31,7 @@ lazy val compilerOptions = Seq(
 )
 
 lazy val monocleVersion = "1.2.2"
-lazy val catsVersion = "0.6.0"
+lazy val catsVersion = "0.6.1"
 
 lazy val commonSettings = Seq(
   resolvers ++= Seq(

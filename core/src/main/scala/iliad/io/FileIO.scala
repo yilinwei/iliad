@@ -14,69 +14,77 @@ object File {
 
 import File._
 
-//TODO: pure
-final class FileIO[A] private[io] (val file: File.Descriptor, val stream: Eval[InputStream], val eval: FileIO.Evaluate[A]) {
+//TODO: IS to channel?
+final class FileIO[A] private[io] (val file: Option[File.Descriptor], val stream: Option[Eval[InputStream]], val eval: FileIO.Evaluate[A]) {
 
   import ops.file._
 
-  private def evalModify[B](f: FileIO.Evaluate[A] => FileIO.Evaluate[B]): FileIO[B] =
+  private def modify[B](f: FileIO.Evaluate[A] => FileIO.Evaluate[B]): FileIO[B] =
     new FileIO(file, stream, f(eval))
 
-  def read[AA](n: Int)(implicit fileRead: FileRead[AA]): FileIO[List[AA]] = evalModify {
-    _.get.map { cache =>
-      //TODO: Need to deal with errors better here
-      val is = cache(file).value
-      val len = n * fileRead.byteSize
-      val bytes = new Array[Byte](len)
-      is.read(bytes, 0, len)
-      (0 until n).map { i =>
-        val arr = new Array[Byte](fileRead.byteSize)
-        Array.copy(bytes, i * fileRead.byteSize, arr, 0, fileRead.byteSize)
-        fileRead.decode(arr)
-      }.toList
+  private def cacheAdd: FileIO.Evaluate[Unit] =
+    (for {
+      f <- file
+      s <- stream
+    } yield State.modify[Map[File.Descriptor, Eval[InputStream]]] { cache =>
+        if(cache.contains(f)) cache else (cache + (f -> s))
+    }.liftT[XorT[?[_], Throwable, ?]]).getOrElse(XorT.pure(()))
+
+  private def terminate[A](t: Throwable): FileIO.Evaluate[A] = XorT(State(_ -> t.left[A]))
+  private def pureEval[A](a: A): FileIO.Evaluate[A] = XorT.pure(a)
+
+  def read[AA](n: Int)(implicit fileRead: FileRead[AA]): FileIO[List[AA]] = modify { e =>
+    e.value.get.liftT[XorT[?[_], Throwable, ?]].flatMap { cache =>
+      val r = for {
+        f <- file
+        iss <- cache.get(f)
+      } yield {
+        val is = iss.value
+        val len = n * fileRead.byteSize
+        val bytes = new Array[Byte](len)
+        is.read(bytes, 0, len)
+       (0 until n).map { i =>
+         val arr = new Array[Byte](fileRead.byteSize)
+         Array.copy(bytes, i * fileRead.byteSize, arr, 0, fileRead.byteSize)
+         fileRead.decode(arr)
+       }.toList
+      }
+      r.map(pureEval).getOrElse(terminate(new IllegalStateException(s"unable to find $file in cache")))
     }
   }
 
   def read1[AA](implicit fileRead: FileRead[AA]): FileIO[AA] =  read[AA](1).map(_.head)
 
-  def map[B](f: A => B): FileIO[B] = evalModify(_.map(f))
+  def map[B](f: A => B): FileIO[B] = modify(_.map(f))
 
-  def flatMap[B](f: A => FileIO[B]): FileIO[B] = evalModify {
+  def flatMap[B](f: A => FileIO[B]): FileIO[B] = modify {
     _.flatMap { a =>
       val fio = f(a)
-      //TODO: use modify once it's released
-      StateT[Throwable Xor ?, Map[File.Descriptor, Eval[InputStream]], Unit] { cache =>
-        if(cache.contains(fio.file)) (cache, ()).right else (cache + (fio.file -> fio.stream), ()).right
-      }.flatMap(_ => fio.eval)
+      fio.cacheAdd.flatMap(_ => fio.eval)
     }
   }
 
-  def unsafePerform: Eval[Throwable Xor A] = Eval.later {
-    eval.run(Map(file -> stream)).map {
-      case (streams, a) =>
-        //TODO: Try catch!
-        streams.mapValues(_.value.close)
+  private def initialState: Map[File.Descriptor, Eval[InputStream]] = (for {
+    f <- file
+    s <- stream
+  } yield Map(f -> s)).getOrElse(Map.empty)
+
+  def unsafePerform: Eval[Throwable Xor A] =
+    eval.value.run(initialState).map {
+      case (open, a) =>
+        open.mapValues(_.value.close)
         a
     }
-  }
 
 }    
 
 
 object FileIO {
 
-  type Evaluate[A] = StateT[Throwable Xor ?, Map[File.Descriptor, Eval[InputStream]], A]
 
+  type Evaluate[A] = XorT[State[Map[File.Descriptor, Eval[InputStream]], ?], Throwable, A]
 
-/*  private case class Leaf[A](file: File.Descriptor, repr: InputStream, run: ReaderT[Throwable Xor ?, InputStream, A]) extends FileIO[A]
- */
-  /*
-
-   FileIO.from("file1.stuff").read[Char](30).flatMap { char =>
-      FileIO.from("file2.stuff").map(...) yada, yada
-   }
-   */
-
+  def pure[A](a: A): FileIO[A] = new FileIO(None, None, XorT.pure(a))
   def from(file: File.Descriptor): FileIO[Unit] = ???
 }
 
@@ -99,15 +107,15 @@ object FileIO {
 
     val d1 = new java.io.ByteArrayInputStream(test.array())
     val d2 = new java.io.ByteArrayInputStream(test2.array())
-    val ff1 = new FileIO(f1, Eval.later {
+    val ff1 = new FileIO(Some(f1), Some(Eval.later {
       println("opened!")
       d1
-    }, StateT.pure(()))
+    }), XorT.pure(()))
 
-    val ff2 = new FileIO(f2, Eval.later {
-      println("opened2!")
+    val ff2 = new FileIO(Some(f2), Some(Eval.later {
+      println("opened23")
       d2
-    }, StateT.pure(()))
+    }), XorT.pure(()))
 
 
     val res = for {
@@ -118,5 +126,4 @@ object FileIO {
     println(res.unsafePerform.value)
 
   }
-
 }*/
