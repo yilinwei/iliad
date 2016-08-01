@@ -2,6 +2,7 @@ package iliad
 package io
 package ops
 
+import java.io.InputStream
 import java.nio.ByteBuffer
 
 object file {
@@ -27,5 +28,9 @@ object file {
   }
 
   object FileRead extends FileReadInstances {
+  }
+
+  trait FileOpen {
+    def open(file: File.Descriptor): InputStream
   }
 }
