@@ -9,7 +9,7 @@ import cats.data._
 
 import File._
 
-final class FileIO[A] private[io] (file: Option[File.Descriptor], private[io] val eval: FileIO.Evaluate[A]) {
+final class FileIO[A] private[io] (val file: Option[File.Descriptor], private[io] val eval: FileIO.Evaluate[A]) {
 
   import FileIO.MEval._
 
@@ -86,8 +86,9 @@ final class FileIO[A] private[io] (file: Option[File.Descriptor], private[io] va
       case (open, a) =>
         open.mapValues(_.value.map(_.close))
         a
-    }   
-}    
+    }
+
+}  
 
 private[io] sealed trait FileIOIsMonad extends Monad[FileIO] {
   def flatMap[A, B](fa: FileIO[A])(f: A => FileIO[B]): FileIO[B] = fa.flatMap(f)
@@ -139,8 +140,6 @@ object FileIO {
 
   def terminate(err: Throwable): FileIO[Unit] =
     new FileIO(None, MEval.raiseError(err))
-
-
 
   implicit val M: Monad[FileIO] = new FileIOIsMonad {} 
 
