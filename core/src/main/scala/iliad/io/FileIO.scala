@@ -37,7 +37,8 @@ final class FileIO[A] private[io] (file: Option[File.Descriptor], private[io] va
           case Xor.Left(err) => raiseError[A](err)
           case Xor.Right(is) => f(is)
         }
-        r.getOrElse(raiseError(new IllegalStateException(s"unable to find $file in stream cache")))
+        //open stream if needed
+        r.getOrElse(cached.flatMap(_ => streaming(f).eval))
       }
     }
   }
@@ -45,10 +46,7 @@ final class FileIO[A] private[io] (file: Option[File.Descriptor], private[io] va
   def map[B](f: A => B): FileIO[B] = modify(_.map(f))
 
   def flatMap[B](f: A => FileIO[B]): FileIO[B] = modify {
-    _.flatMap { a =>
-      val fio = f(a)
-      fio.cached.flatMap(_ => fio.eval)
-    }
+    _.flatMap(a => f(a).eval)
   }
 
   def read[AA](n: Int)(implicit fileRead: FileRead[AA]): FileIO[List[AA]] = streaming { is =>
@@ -68,10 +66,7 @@ final class FileIO[A] private[io] (file: Option[File.Descriptor], private[io] va
 
   def skip[AA](n: Int): FileIO[Unit] = streaming { is =>
     val skipped = is.skip(n)
-    if(skipped.toInt == n)
-      pure(())
-    else
-      raiseError(new IllegalStateException(s"stream for ${file} does not have $n elements to skip"))
+    if(skipped.toInt == n) pure(()) else raiseError(new IllegalStateException(s"stream for ${file} does not have $n elements to skip"))
   }
 
   def skip1[AA]: FileIO[Unit] = skip(1)
@@ -79,16 +74,15 @@ final class FileIO[A] private[io] (file: Option[File.Descriptor], private[io] va
   def chunk[AA](n: Int): FileIO[Chunk[AA]] = streaming { is =>
     val bytes = new Array[Byte](n)
     val chunked = is.read(bytes, 0, n)
-    if(chunked == n)
-      pure(new Chunk[AA](bytes))
-    else
-      raiseError(new IllegalStateException(s"stream for ${file} does not have expected $n elements to chunk"))
+    if(chunked == n) pure(new Chunk[AA](bytes)) else raiseError(new IllegalStateException(s"stream for ${file} does not have expected $n elements to chunk"))
   }
 
   def chunk1[AA]: FileIO[Chunk[AA]] = chunk(1)
 
+  def recoverWith(f: Throwable => FileIO[A]): FileIO[A] = modify(fa => handleErrorWith(fa)(f andThen (_.eval)))
+
   def unsafePerform(implicit dir: File.Dir): Eval[Throwable Xor A] =
-    cached.flatMap(_ => eval).run(dir).value.run(Map.empty).map {
+    eval.run(dir).value.run(Map.empty).map {
       case (open, a) =>
         open.mapValues(_.value.map(_.close))
         a
@@ -101,7 +95,7 @@ private[io] sealed trait FileIOIsMonad extends Monad[FileIO] {
   override def map[A, B](fa: FileIO[A])(f: A => B): FileIO[B] = fa.map(f)
 }
 
-private[io] final class EvaluateMonadStateReader
+private[io] final class EvaluateMonadErrorStateReader
     extends MonadState[FileIO.Evaluate, Map[File.Descriptor, Eval[IOException Xor InputStream]]]
     with MonadReader[FileIO.Evaluate, File.Dir]
     with MonadError[FileIO.Evaluate, Throwable] {
@@ -136,13 +130,17 @@ object FileIO {
 
   type Evaluate[A] = ReaderT[XorT[State[Map[File.Descriptor, Eval[IOException Xor InputStream]], ?], Throwable, ?], File.Dir, A]
 
-  private[io] val MEval = new EvaluateMonadStateReader
+  private[io] val MEval = new EvaluateMonadErrorStateReader
 
   def pure[A](a: A): FileIO[A] = new FileIO(None, MEval.pure(a))
 
-  //TODO: Remove FileOpen and add to unsafePerform
   def file(file: File.Descriptor): FileIO[Unit] =
     new FileIO(Some(file), MEval.pure(()))
+
+  def terminate(err: Throwable): FileIO[Unit] =
+    new FileIO(None, MEval.raiseError(err))
+
+
 
   implicit val M: Monad[FileIO] = new FileIOIsMonad {} 
 
@@ -162,9 +160,9 @@ object FileIO {
     test.rewind()
 
 
-    val test2 = java.nio.ByteBuffer.allocate(8)
+    val test2 = java.nio.ByteBuffer.allocate(4)
     test2.putInt(1)
-    test2.putInt(4)
+  //  test2.putInt(4)
     test2.rewind()
 
     val d1 = new java.io.ByteArrayInputStream(test.array())
@@ -179,11 +177,13 @@ object FileIO {
 
     val ff2 = FileIO.file(f2)
 
-    val res = for {
+    val res = ff2.read[Int](2).recoverWith(t => ff1.read[Int](2))
+
+/*    val res = for {
       foo <- ff1.read[Int](1)
       foo2 <- ff1.read[Int](1)
       bar <- ff2.read[Int](2)
-    } yield s"$foo $foo2 $bar"   
+    } yield s"$foo $foo2 $bar"   */
 
     println(res.unsafePerform.value)
 
