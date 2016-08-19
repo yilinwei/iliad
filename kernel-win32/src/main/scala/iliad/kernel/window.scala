@@ -6,6 +6,7 @@ import cats.data._
 import cats.implicits._
 
 import scala.reflect._
+import scala.concurrent.duration._
 
 import iliad.kernel.platform.win32.User32._
 
@@ -15,6 +16,12 @@ import com.sun.jna.platform.win32.WinUser._
 import com.sun.jna._
 
 import Win32._
+
+import fs2._
+import fs2.async.mutable._
+import fs2.util._
+
+import com.typesafe.scalalogging._
 
 private[kernel] final class MessageCallback(delegate: Win32EventHandler)
     extends Callback {
@@ -57,12 +64,31 @@ trait Win32GLDependencies extends GLDependencies {
   val configClassTag: ClassTag[EGLConfig] = classTag[EGLConfig]
   val EGL14 = iliad.kernel.EGL14
   val GLES30 = iliad.kernel.GLES30
+  val pageSize: Int = 1024
 }
 
 abstract class Win32Bootstrap(name: String, val width: Int, val height: Int)
     extends Win32EventHandler
     with IliadApp
-    with Win32GLDependencies {
+    with Win32GLDependencies
+    with LazyLogging {
+
+  //TODO: fix this
+  implicit val SS = Strategy.fromFixedDaemonPool(1, "vsync-thread")
+  implicit val S = Scheduler.fromFixedDaemonPool(4)
+
+  private def vsync(s: Signal[Task, Long]): Unit = {
+    (for {
+      t <- s.get
+      _ <- s.set(t + 5L).schedule(1 second)
+    } yield vsync(s)).unsafeRunAsync(msg => logger.info(msg.toString))
+  }
+
+  def vsync: Stream[Task, Long] =
+    Stream.eval(async.signalOf[Task, Long](0L)).flatMap { s =>
+      vsync(s)
+      s.discrete
+    }
 
   def main(args: Array[String]): Unit = {
     val win32 = new Win32(name, width, height, this)
@@ -89,7 +115,7 @@ class Win32(name: String, width: Int, height: Int, delegate: Win32EventHandler) 
   }
 
   def checkNull[A](action: String)(a: A): Error Xor A =
-    if (a == null) Error(0, "$action unexpectedly returned null").left
+    if (a == null) Error(0, s"$action unexpectedly returned null").left
     else a.right
 
   def register: Error Xor WNDCLASSEX = {

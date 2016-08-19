@@ -1,12 +1,9 @@
 package iliad
 package kernel
 
-import cats._
-
 import scala.reflect._
 
 import fs2.util._
-import fs2.async.mutable._
 
 trait IliadApp {
   def run(): Unit
@@ -23,7 +20,7 @@ trait ScreenDependencies {
   def lockDisplay: Option[NativeDisplay => Unit] = None
   def unlockDisplay: Option[NativeDisplay => Unit] = None
 
-  def vsync(s: Signal[Task, Long]): Unit
+  def vsync: fs2.Stream[Task, Long]
 }
 
 trait GLDependencies extends ScreenDependencies {
@@ -45,6 +42,8 @@ trait GLDependencies extends ScreenDependencies {
   ]
 
   val GLES30: platform.GLES30Library
+
+  val pageSize: Int
 }
 
 //Ideally our only implementation inside here would be the EGL14Library
