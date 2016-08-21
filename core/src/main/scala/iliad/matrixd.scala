@@ -48,8 +48,11 @@ final class MatrixD[W <: Nat, H <: Nat, A] private[iliad] (_unsized: Vector[A],
     map(x => G.plus(x, a))
   def unary_-(implicit G: AdditiveGroup[A]): MatrixD[W, H, A] =
     map(-_)
+
+  //TODO: alias to :*
   def timesl(a: A)(implicit G: MultiplicativeSemigroup[A]): MatrixD[W, H, A] =
     map(x => G.times(x, a))
+  //TODO: alias to *
   def times(m: MatrixD[W, H, A])(
       implicit S: MultiplicativeSemigroup[MatrixD[W, H, A]])
     : MatrixD[W, H, A] = S.times(this, m)
