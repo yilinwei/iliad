@@ -22,6 +22,8 @@ project/plugins/project/
 
 # emacs
 \#*\#
+*.org
+*.org_archive
 
 #projectile
 .projectile

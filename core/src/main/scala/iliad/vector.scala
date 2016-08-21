@@ -53,7 +53,27 @@ final class VectorD[N <: Nat, A] private[iliad] (val _unsized: Vector[A]) extend
   override def toString: String = unsized.toString
 }
 
+import scodec._
+import scodec.bits._
+
+import shapeless.ops.nat._
+
+private[iliad] final class VectorDEncoder[N <: Nat, A]
+  (encoder: Encoder[A])
+  (implicit ToInt: ToInt[N]) extends Encoder[VectorD[N, A]] {
+
+  val sizeBound = encoder.sizeBound * ToInt()
+
+  def encode(v: VectorD[N, A]): Attempt[BitVector] = {
+    Encoder.encodeSeq(encoder)(v._unsized)
+  }
+
+}
+
 object VectorD extends VectorDInstances {
+
+  def encoder[A](n: Nat)(implicit encoder: Encoder[A], ToInt: ToInt[n.N]): Encoder[VectorD[n.N, A]] =
+    new VectorDEncoder(encoder)
 
   def zero[N <: Nat, A](implicit NA: Numeric[A],
                         toInt: ToInt[N]): VectorD[N, A] = fill(NA.zero)
