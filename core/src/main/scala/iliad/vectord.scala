@@ -12,7 +12,7 @@ import shapeless.ops.nat._
 import scala.reflect._
 
 //TODO: Really think we should parameterize this?
-case class VectorD[N <: Nat, A] private[iliad] (_unsized: Vector[A]) {
+case class VectorD[N <: Nat, A] private[iliad] (_unsized: Vector[A]) extends AnyVal {
 
   import LTEq._
   import LT._
