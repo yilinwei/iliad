@@ -81,30 +81,59 @@ final class MatrixD[W <: Nat, H <: Nat, A] private[iliad] (_unsized: Vector[A],
   }
 }
 
+import scala.annotation._
+
 object MatrixD {
   def fill[W <: Nat, H <: Nat, A](a: A)(implicit toIntW: ToInt[W],
-                                        toIntH: ToInt[H]): MatrixD[W, H, A] =
-    new MatrixD(Vector.fill(toIntW() * toIntH())(a), toIntW(), toIntH())
+                                        toIntH: ToInt[H]): MatrixD[W, H, A] = {
+
+    val N = toIntW()
+    val M = toIntH()
+    new MatrixD(Vector.fill(N * M)(a), N, M)
+  }
+
   def zero[W <: Nat, H <: Nat, A](implicit toIntW: ToInt[W],
                                   toIntH: ToInt[H],
                                   R: Ring[A]): MatrixD[W, H, A] =
     fill(R.zero)
+
   def identity[N <: Nat, A](implicit toInt: ToInt[N],
                             R: Ring[A]): MatrixD[N, N, A] = {
-    val ones = (0 until toInt()).map(_ * (toInt() + 1))
-    val id = (0 until toInt() * toInt())
-      .map(i => if (ones.contains(i)) R.one else R.zero)
-      .toVector
-    new MatrixD(id, toInt(), toInt())
+    val N = toInt()
+    val NN = N * N
+    val builder = Vector.newBuilder[A]
+    val z = R.zero
+    val o = R.one
+
+    @annotation.tailrec
+    def go(i: Int, n: Int): Vector[A] = {
+      if(i < NN) {
+        if(i == n) {
+          builder += o
+          go(i + 1, n + N + 1)
+        } else {
+          builder += z
+          go(i + 1, n)
+        }       
+      } else {
+        val v = builder.result()
+        builder.clear()
+        v
+      }
+    }
+
+    new MatrixD(go(0, 0), N, N)
   }
 
   def sized[W <: Nat, H <: Nat, A](unsized: Vector[A])(
       implicit toIntW: ToInt[W],
-      toIntH: ToInt[H]): MatrixD[W, H, A] =
-    if (unsized.length != toIntW() * toIntH())
-      throw new IllegalArgumentException(
-          s"matrix $unsized does not have dimensions ${toIntW()} ${toIntH()}")
-    else new MatrixD(unsized, toIntW(), toIntH())
+      toIntH: ToInt[H]): MatrixD[W, H, A] = {
+    val N = toIntW()
+    val M = toIntH()
+
+    require(unsized.length == N * M, s"matrix $unsized does not have dimensions ${toIntW()} ${toIntH()}")
+    new MatrixD(unsized, N, M)
+  }
 
   def sized[A](w: Nat, h: Nat, unsized: Vector[A])(
       implicit toIntW: ToInt[w.N],
