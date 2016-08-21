@@ -16,4 +16,7 @@ trait MatrixDSyntax extends MatrixContextSyntax {
   type Mat2f = Mat2[Float]
   type Mat3f = Mat3[Float]
   type Mat4f = Mat4[Float]
+
+  type Mat4Algebra[A] = MatrixAlgebra[nat._4, A]
+
 }

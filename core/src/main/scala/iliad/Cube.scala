@@ -18,7 +18,7 @@ case class Cube[A](
   w: A
 ) {
 
-  def origin(implicit N: Numeric[A]): Vec3[A] = (w *: xn + w *: yn + w *: zn) + o
+  def origin(implicit G: Semiring[A]): Vec3[A] = (w *: xn + w *: yn + w *: zn) + o
 
   def convert[B : ConvertableTo](implicit F: ConvertableFrom[A]): Cube[B] = Cube(
     o.map(F.toType[B]),
@@ -28,12 +28,12 @@ case class Cube[A](
     F.toType[B](w)
   )
  
-  def bounded(v: Vec3[A])(implicit N: Numeric[A]): Boolean = {
+  def bounded(v: Vec3[A])(implicit G: Rng[A], O: Order[A]): Boolean = {
     val ww = w * w
     ((o - v) ⋅ xn < ww) && ((o - v) ⋅ yn < ww)
   }
 
-  def translate(t: Vec3[A])(implicit N: Numeric[A]): Cube[A] =
+  def translate(t: Vec3[A])(implicit G: AdditiveSemigroup[A]): Cube[A] =
     this.copy(o = t + this.o)
 
   //TODO: use cross product
@@ -47,12 +47,12 @@ import shapeless.ops.nat._
 import scala.collection.mutable.ArrayBuilder
 
 object Cube extends CubeInstances {
-  // TODO: Import Field
-  def apply[A](w: A)(implicit V: InnerProductSpace[Vec3[A], A], N: Numeric[A]): Cube[A] = {
-    val o = N.fromInt(1)
-    val z = N.zero
+
+  def apply[A](w: A)(implicit F: Field[A]): Cube[A] = {
+    val o = F.fromInt(1)
+    val z = F.zero
     Cube(
-      V.zero,
+      InnerProductSpace[Vec3[A], A].zero,
       v"$o $z $z",
       v"$z $o $z",
       v"$o $o $z",
