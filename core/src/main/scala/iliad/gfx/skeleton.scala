@@ -15,12 +15,12 @@ import shapeless._
 
 import Skeleton._
 
-trait Interp[F[_, _], T, A] {
+/*trait Interp[F[_, _], T, A] {
   def interp(x: F[T, A], y: F[T, A])(at: T): F[T, A]
-}
+}*/
 
 /** Spherical linear interpolation */
-private[gfx] trait Slerp[T, A] extends Interp[Pose, T, A] {
+/*private[gfx] trait Slerp[T, A] extends Interp[Pose, T, A] {
 
   implicit def G0: Ring[A]
   implicit def G1: Module[Vec3[A], A]
@@ -46,7 +46,7 @@ private[gfx] trait Slerp[T, A] extends Interp[Pose, T, A] {
     } else {
       val ϕ = T.acos(θ1.e ⋅ θ2.e)
       val r = (ka * ϕ, e3)
-      Pose(at, (ka * (θ2.θ - θ1.θ) + θ1.θ, r * e3))
+      Pose(at, ((ka + G0.one) * θ1.θ, r * θ1.e))
     }
   }
 }
@@ -62,11 +62,88 @@ object Interp {
     val T = Trig[A]
     val C1 = ConvertableTo[A]
   }
+}*/
+
+object Interp {
+  type AnimM[T, A] = T => SVector[Mat4[A]]
 }
 
-trait Skeleton[A]
+trait Interp[T, A] {
+  def interpM(t1: T, s1: Skeleton[A])(t2: T, s2: Skeleton[A]): Interp.AnimM[T, A]
+}
+
+private[gfx] trait Slerp[T, A] extends Interp[T, A] {
+  def interpM(t1: T, s1: Skeleton[A])(t2: T, s2: Skeleton[A]): Interp.AnimM[T, A] = {
+    //require(t1 > t2, s"$t2 is less than $t1, cannot interpolate")
+
+
+/*    s1.foldLeft2()(s2) { ()
+    }*/
+    ???
+  }
+}
+
+//import cats.implicits._
+
+
+trait Skeleton[A] { self =>
+  
+  def foldLeft[B](b: B)(f: (B, Bone[A]) => B): B = {
+    def go(acc: B, s: Skeleton[A]): B = s match {
+      case b: Bone[A] => f(acc, b)
+      case _ @ Joint(p, bs) => bs.foldLeft(f(acc, p))((b, a) => go(b, a))
+    }
+    go(b, self)
+  }
+
+  def foldLeftPath[B](b: B)(f: (B, Int, List[Int]) => B): B = {
+    def go(acc: B, idx: Int, s: Skeleton[A], path: List[Int]): (B, Int) = s match {
+      case b: Bone[A] => 
+        (f(acc, idx, path), idx)
+      case _  @ Joint(p, bs) => 
+        val next = f(acc, idx, path)
+        val path2 = idx :: path
+        bs.foldLeft((next, idx)) { (bb, aa) =>
+          go(bb._1, bb._2 + 1, aa, path2)
+        }
+    }
+    go(b, 0, self, List.empty)._1
+  }
+
+  def size: Int = foldLeft(0)((s, _) => s + 1)
+
+  def foldLeft2[B](that: Skeleton[A])(b: B)(f: (B, Bone[A], Bone[A]) => B): Option[B] = {
+    def go(acc: Option[B], x: Skeleton[A], y: Skeleton[A]): Option[B] = {
+      acc.flatMap { bb =>
+        (x, y) match {
+          case (xx: Bone[A], yy: Bone[A]) => Some(f(bb, xx, yy))
+          case (_ @ Joint(xx, bs1), _ @ Joint(yy, bs2)) =>
+            if(bs1.size != bs2.size) None else bs1.zip(bs2).foldLeft(Option(f(acc.get, xx, yy))) { (bbb, ab) =>
+              go(bbb, ab._1, ab._2)
+            }
+          case (_: Bone[A], _) => None
+          case (_, _: Bone[A]) => None
+        }
+      }
+    }
+    go(Some(b), self, that)
+  }
+
+}
 
 object Skeleton {
+
+  type Animation[A, T] = List[KeyFrame[A, T]]
+  type Children[A] = SVector[A]
+
+
+  case class Bone[A](length: A, x: Vec3[A], y: Vec3[A]) extends Skeleton[A]
+  case class Joint[A](parent: Bone[A], children: Children[Skeleton[A]]) extends Skeleton[A]
+  val Children = SVector
+  
+  case class KeyFrame[A, T](at: T, skeleton: Skeleton[A])
+
+
 
 
 
@@ -75,7 +152,7 @@ object Skeleton {
     * @param length bone length
     * @param θ bone orientation
     */
-  case class Bone[A](length: A, θ: AxisAngle[A]) extends Skeleton[A] { self =>
+/*  case class Bone[A](length: A, θ: AxisAngle[A]) extends Skeleton[A] { self =>
     def *:(θ: AxisAngle[A])(implicit G: Ring[A], T: Trig[A]): Bone[A] = {
       //val θb = self.θ
       //Bone(length, (θb.θ, θ.matrix * θb.e))
@@ -83,20 +160,22 @@ object Skeleton {
     }
   }
 
+ 
+
   //N -> NN
 
-  case class Joint[A](bone: Bone[A], children: SVector[Skeleton[A]]) extends Skeleton[A]
-  case class IndexedPose[T, A](at: T, poses: SVector[AxisAngle[A]])
-  case class Pose[T, A](at: T, θ: AxisAngle[A])
+  case class Joint[A](bone: Bone[A], children: Childen[Skeleton[A]]) extends Skeleton[A]
+  case class IndexedPose[T, A](at: T, poses: Childen[AxisAngle[A]])*/
+  case class Pose[T, A](at: T, θ: AxisAngle[A]) 
 
 /*  case class Animation[N <: Nat, T, A](frames: List[IndexedPose[N, T, A]]) {
-    def apply(skeleton: Skeleton[N, A])(t: T): Sized[SVector[Mat4[A]], N] = ???
+    def apply(skeleton: Skeleton[N, A])(t: T): Sized[Childen[Mat4[A]], N] = ???
   }*/
 }
 
 
 /*
-import scala.{Vector => SVector}
+import scala.{Vector => Childen}
 import spire.algebra._
 
 trait Render[A] {
@@ -154,13 +233,13 @@ object Skeleton {
 
   //N -> NN
 
-  case class Joint[N <: Nat](bone: Bone[A], children: Sized[SVector[Skeleton[A]], N]) extends Skeleton[Succ[N], A]
+  case class Joint[N <: Nat](bone: Bone[A], children: Sized[Childen[Skeleton[A]], N]) extends Skeleton[Succ[N], A]
 
-  case class IndexedPose[N <: Nat, T, A](at: T, poses: Sized[SVector[AxisAngle[A]], N])
+  case class IndexedPose[N <: Nat, T, A](at: T, poses: Sized[Childen[AxisAngle[A]], N])
   case class Pose[T, A](at: T, θ: AxisAngle[A])
 
 /*  case class Animation[N <: Nat, T, A](frames: List[IndexedPose[N, T, A]]) {
-    def apply(skeleton: Skeleton[N, A])(t: T): Sized[SVector[Mat4[A]], N] = ???
+    def apply(skeleton: Skeleton[N, A])(t: T): Sized[Childen[Mat4[A]], N] = ???
   }*/
 }
 
