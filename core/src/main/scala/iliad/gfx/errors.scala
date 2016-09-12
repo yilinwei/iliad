@@ -4,20 +4,20 @@ package gfx
 import iliad.{gl => GL}
 
 sealed trait GraphicsError extends IliadError
-case class UnsetScopeError(s: UniformScope, existing: Set[UniformScope])
+case class UnsetScopeError(scope: String, existing: Set[String])
     extends GraphicsError {
   override def toString: String =
-    s"""UnsetScopeError: Scope $s has not been set:
-Unset scope: $s
+    s"""UnsetScopeError: Scope $scope has not been set:
+Unset scope: $scope
 Existing:
 $existing
 """
 }
 
-case class UnsetUniformError(name: String, s: UniformScope)
+case class UnsetUniformError(name: String, scope: String)
     extends GraphicsError {
   override def toString: String =
-    s"Uniform [$name] has not been set for scope [$s]"
+    s"Uniform [$name] has not been set for scope [$scope]"
 }
 
 
@@ -149,9 +149,12 @@ case class TextureUniformMissingError(uniform: String)
     extends InstantiationError {
   override def toString: String = s"Missing texture uniform $uniform"
 }
-case class AttributeMissingError(a: GL.Attribute.Constructor)
+case class AttributeMissingError(a: GL.Attribute.Constructor, present: List[GL.Attribute.Constructor])
     extends InstantiationError {
-  override def toString: String = s"Missing attribute: [$a]"
+  override def toString: String = 
+    s"""Missing attribute: [$a]
+Present attributes: [$present]
+"""
 }
 
 case class StartNodeMissingError(l: Link, e: Node.Instance)

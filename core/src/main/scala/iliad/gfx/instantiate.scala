@@ -13,28 +13,40 @@ import scodec.bits._
 trait InstantiateFunctions {
 
   def vertexBuffer(name: String, attributes: Attribute*): VertexBuffer =
-    VertexBuffer(GL.VertexBuffer.Constructor(name, attributes.toList.map(_.attribute)))
+    GL.VertexBuffer.Constructor(name, attributes.toList.map(_.attribute))
 
   def elementBuffer(name: String): ElementBuffer =
-    ElementBuffer(GL.ElementBuffer.Constructor(name))
+    GL.ElementBuffer.Constructor(name)
 
   def vertexRef(name: String, data: ByteVector, buffer: VertexBuffer): VertexRef =
-    VertexRef(GL.Model.VertexRef(
-      GL.VertexData.Ref(name, buffer.buffer),
+    GL.Model.VertexRef(
+      GL.VertexData.Ref(name, buffer),
       GL.DataRange(0, data.size.toInt)
-    ))
+    )
+
+  def subVertexRef(ref: VertexRef, range: (Int, Int)): VertexRef = 
+    GL.Model.VertexRef(
+      ref.ref,
+      GL.DataRange(range._1, range._2)
+    )
 
   def elementRef(name: String, data: ByteVector, buffer: ElementBuffer): ElementRef =
-    ElementRef(GL.Model.ElementRef(
-      GL.ElementData.Ref(name, buffer.buffer),
+    GL.Model.ElementRef(
+      GL.ElementData.Ref(name, buffer),
       GL.DataRange(0, data.size.toInt)
-    ))
+    )
 
-  def model(name: String, vertexRef: VertexRef, elementRef: ElementRef): Model =
-    Model(name, GL.Model(
-      vertexRef.ref,
-      elementRef.ref
-    ))
+  def subElementRef(ref: ElementRef, range: (Int, Int)): ElementRef =
+    GL.Model.ElementRef(
+      ref.ref,
+      GL.DataRange(range._1, range._2)
+    )
+
+  def model(vertexRef: VertexRef, elementRef: ElementRef): Model =
+    GL.Model(
+      vertexRef,
+      elementRef
+    )
 
   def image[A](name: String)(implicit f: GL.GLTextureFormat[A]): Texture.Image =
     Texture.Image(name, f.format)
@@ -42,7 +54,7 @@ trait InstantiateFunctions {
   def drawInstance(
       model: Model,
       cons: Draw.Constructor,
-      uniforms: Map[String, UniformScope],
+      uniforms: List[ScopeProperty],
       textureUniforms: (String, Texture.Uniform)*): Draw.Instance =
     Draw.Instance(cons,
                   textureUniforms.toMap,
@@ -117,7 +129,7 @@ object ValidateNodeInstance {
       n: Draw.Instance)(implicit M: ME[F]): F[Unit] =
     n.vertexAttribs.traverseUnit { a =>
       if (n.modelAttribs.contains(a)) M.pure(())
-      else M.raiseError[Unit](NonEmptyList(AttributeMissingError(a)))
+      else M.raiseError[Unit](NonEmptyList(AttributeMissingError(a, n.modelAttribs)))
     }
 
   private def pipes[F[_]](n: Draw.Instance, sources: List[Node.Instance], g: Graph.Instance)(implicit E: ME[F]): F[List[Link.Instance]] =

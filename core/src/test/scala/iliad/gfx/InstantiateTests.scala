@@ -67,13 +67,13 @@ class InstantiateTests extends FunSuite with Matchers {
 
     val hedgehogVref = vertexRef("hedgehog-vertices", vertexData, vb)
     val hedgehogEref = elementRef("hedgehog-elements", elementData, eb)
-    val hedgehogModel = model("hedgehog", hedgehogVref, hedgehogEref)
+    val hedgehogModel = model(hedgehogVref, hedgehogEref)
 
     val hedgehogImage = Texture.Image("hedgehog-spikes", GL.Texture.Format.rgba)
     val hedgehogDraw = drawInstance(
       hedgehogModel,
       exampleDrawConstructor,
-      Map.empty,
+      List.empty,
       "image" -> hedgehogImage)
 
     val result = for {

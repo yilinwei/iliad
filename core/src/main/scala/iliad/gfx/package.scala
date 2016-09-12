@@ -10,10 +10,11 @@ package object gfx
     extends LoadFunctions
     with ActionFunctions
     with UniformCacheFunctions
-    with AnimationFunctions
     with ConstructFunctions
     with InstantiateFunctions
-    with ShaderFunctions {
+    with ShaderFunctions 
+    with Update.ToUpdateOps 
+    with Render.ToRenderOps {
 
   type GraphTraversal = Graph.Instance => Vector[Node.Instance]
 
@@ -25,4 +26,10 @@ package object gfx
   }
 
   type GFX = UniformCache :+: Load :+: Action :+: CNil
+
+  type VertexBuffer = GL.VertexBuffer.Constructor
+  type ElementBuffer = GL.ElementBuffer.Constructor
+  type VertexRef = GL.Model.VertexRef
+  type ElementRef = GL.Model.ElementRef
+  type Model = GL.Model
 }

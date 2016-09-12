@@ -37,12 +37,12 @@ class Line2Tests extends FunSuite with Matchers with GeneratorDrivenPropertyChec
   test("line does not intersect with parallel line") {
     forAll(VectorGen.gen[nat._2, Double](doubleGen), 
       VectorGen.gen[nat._2, Double](doubleGen),
-      VectorGen.normalGen[nat._2, Double](Arbitrary.arbitrary[Double])) {
+      VectorGen.normalGen[nat._2, Double](doubleGen)) {
       (p0, p1, d) =>
       val l0 = Line2(p0, d)
       val l1 = Line2(p1, d)
 
-      l0.intersection(l1, θ, α) should equal(None)
+      l0.intersection(l1, θ, 0.0) should equal(None)
     }
   }
 
@@ -143,5 +143,9 @@ class Line2Tests extends FunSuite with Matchers with GeneratorDrivenPropertyChec
 
   test("line equation for vertical line is in form [x = const]") {
     Line2(v"2.0 1.0", v"0.0 1.0").equation should be("[x = 2.0]")
+  }
+
+  test("toString is expected") {
+    Line2(v"1 2", v"0 1").toString should ===("Line2(Vector(1, 2), Vector(0, 1))")
   }
 }
