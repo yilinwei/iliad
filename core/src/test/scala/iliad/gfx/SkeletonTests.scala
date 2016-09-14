@@ -18,7 +18,6 @@ class SkeletonTests extends FunSuite with Matchers {
   val y = Vector.basis[Y, _3D, Float]
   
   val dummy = Bone(10f, x, y)
-//  val z = Vector.basis[Z, _3D, Float]
 
   test("skeleton should have expected size") {
     Joint(

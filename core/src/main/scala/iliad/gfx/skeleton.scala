@@ -72,18 +72,39 @@ trait Interp[T, A] {
   def interpM(t1: T, s1: Skeleton[A])(t2: T, s2: Skeleton[A]): Interp.AnimM[T, A]
 }
 
-private[gfx] trait Slerp[T, A] extends Interp[T, A] {
-  def interpM(t1: T, s1: Skeleton[A])(t2: T, s2: Skeleton[A]): Interp.AnimM[T, A] = {
-    //require(t1 > t2, s"$t2 is less than $t1, cannot interpolate")
+private[gfx] final class Slerp[T : Order, A: Trig : Fractional : Eq](
+  implicit N: NormedVectorSpace[Vec3[A], A],
+  G0: MultiplicativeSemigroup[Mat3[A]],
+  G1: MultiplicativeSemigroup[Mat4[A]]) extends Interp[T, A] {
 
+//  private def interpM(xt: T, yt: T, ts: SVector[Mat4[]]
 
-/*    s1.foldLeft2()(s2) { ()
-    }*/
-    ???
+  def interpM(xt: T, x: Skeleton[A])(yt: T, y: Skeleton[A]): Interp.AnimM[T, A] = {
+    x.foldIndexed2(y, List.empty[(Int, AxisAngle[A])]) { (b, idx, xx, yy) =>
+      (idx, AxisAngle.basisRotation(xx.x, xx.y)(yy.x, yy.y)) :: b
+    } match {
+      case Some(axisAngles) => 
+        val paths = x.pathByIndex
+        val lengths = y.lengthByIndex
+        val size = x.size
+
+        t => {
+
+          val id = G1.zero
+
+          paths.map { p =>
+            p.foldLeft(Matrix)
+          }
+
+          axisAngles(0).matrix
+          //we want to do a matrix transform
+
+          ???
+        }
+      case None => throw new IllegalArgumentException("trying to interpolate between skeletons of a different structure!")  
+    }
   }
 }
-
-//import cats.implicits._
 
 
 trait Skeleton[A] { self =>
@@ -96,12 +117,25 @@ trait Skeleton[A] { self =>
     go(b, self)
   }
 
-  def foldLeftPath[B](b: B)(f: (B, Int, List[Int]) => B): B = {
+  def pathByIndex: Map[Int, List[Int]] = {
+    val ps = foldPath(List.empty[(Int, List[Int])])((b, i, p) => (i, p) :: b)
+    ps.toMap
+  }
+
+  def lengthByIndex: Map[Int, A] = {
+    val ls = foldIndexed(List.empty[(Int, A)])((ls, i, b) => (i, b.length) :: ls)
+    ls.toMap
+  }
+
+  def foldPath[B](b: B)(f: (B, Int, List[Int]) => B): B = 
+    foldIndexedWithPath[B](b)((acc, idx, _, p) => f(acc, idx, p))
+
+  def foldIndexedWithPath[B](b: B)(f: (B, Int, Bone[A], List[Int]) => B): B = {
     def go(acc: B, idx: Int, s: Skeleton[A], path: List[Int]): (B, Int) = s match {
-      case b: Bone[A] => 
-        (f(acc, idx, path), idx)
-      case _  @ Joint(p, bs) => 
-        val next = f(acc, idx, path)
+      case b: Bone[A] =>
+        (f(acc, idx, b, path), idx)
+      case _  @ Joint(p, bs) =>
+        val next = f(acc, idx, p, path)
         val path2 = idx :: path
         bs.foldLeft((next, idx)) { (bb, aa) =>
           go(bb._1, bb._2 + 1, aa, path2)
@@ -110,9 +144,12 @@ trait Skeleton[A] { self =>
     go(b, 0, self, List.empty)._1
   }
 
+  def foldIndexed[B](b: B)(f: (B, Int, Bone[A]) => B): B = 
+    foldIndexedWithPath(b)((acc, idx, b, _) => f(acc, idx, b))
+
   def size: Int = foldLeft(0)((s, _) => s + 1)
 
-  def foldLeft2[B](that: Skeleton[A])(b: B)(f: (B, Bone[A], Bone[A]) => B): Option[B] = {
+  def foldLeft2[B](that: Skeleton[A], b: B)(f: (B, Bone[A], Bone[A]) => B): Option[B] = {
     def go(acc: Option[B], x: Skeleton[A], y: Skeleton[A]): Option[B] = {
       acc.flatMap { bb =>
         (x, y) match {
@@ -129,6 +166,13 @@ trait Skeleton[A] { self =>
     go(Some(b), self, that)
   }
 
+  def foldIndexed2[B](that: Skeleton[A], b: B)(f: (B, Int, Bone[A], Bone[A]) => B): Option[B] = {
+    foldLeft2(that, (b, 0)) { (acc, ba, bb) =>
+      val idx = acc._2
+      (f(acc._1, idx, ba, bb), idx + 1)
+    }.map(_._1)      
+  }
+
 }
 
 object Skeleton {
@@ -137,7 +181,11 @@ object Skeleton {
   type Children[A] = SVector[A]
 
 
-  case class Bone[A](length: A, x: Vec3[A], y: Vec3[A]) extends Skeleton[A]
+  //x, y, z form the basis vector for the bone, l is always in the direction of z
+
+  case class Bone[A](length: A, x: Vec3[A], y: Vec3[A]) extends Skeleton[A] {
+    def z: Vec3[A] = ???
+  }
   case class Joint[A](parent: Bone[A], children: Children[Skeleton[A]]) extends Skeleton[A]
   val Children = SVector
   

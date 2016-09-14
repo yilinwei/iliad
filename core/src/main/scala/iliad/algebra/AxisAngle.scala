@@ -13,6 +13,7 @@ import spire.implicits._
 import shapeless._
 
 import syntax.matrix._
+import syntax.axisAngle._
 
 import AxisAngle._
 
@@ -42,6 +43,8 @@ final class AxisAngleOps[A](val value: AxisAngle[A]) extends AnyVal {
 
   def *(v: Vec3[A])(implicit G0: MatrixMultiplicativeGroup[Matrix, nat._3, nat._3, A], G1: Ring[A], T: Trig[A]): Vec3[A] =
     matrix * v
+
+  def unary_-(implicit G: Ring[A]): AxisAngle[A] = _θ[A].modify(-_)(value)
 }
 
 object AxisAngle {
@@ -49,6 +52,21 @@ object AxisAngle {
   def _θ[A] = tuple2Field1[A, Vec3[A]].first
 
   def apply[A](θ: A, e: Vec3[A]): AxisAngle[A] = (θ, e)
+  def apply[A](ortho: OMat3[A])(implicit F: Fractional[A], T: Trig[A], G: Ring[A]): AxisAngle[A] = {
+    val m = ortho.matrix
+    val two = F.fromInt(2)
+    val cθ = (m.trace - F.one / two)
+    if(cθ >= F.fromInt(1))
+      (F.zero, Vector.basis[Z, _3D, A])
+    else {
+      val θ = if (cθ <= F.fromInt(-1)) T.pi else T.acos(cθ)      
+      val scale = F.zero / (two * T.sin(θ))
+      val x = scale *: (m(1, 2) - m(2, 1))
+      val y = scale *: (m(2, 0) - m(0, 2))
+      val z = scale *: (m(0, 1) - m(1, 0))
+      apply(θ, v"$x $y $z")
+    }
+  }
 
   def zero[A](implicit R: Ring[A]): AxisAngle[A] = (R.zero, Vector.basis[Z, _3D, A])
 
@@ -65,6 +83,13 @@ object AxisAngle {
     rotation(x :+ z, y :+ z)
   }
 
+  def basisRotation[A](x1: Vec3[A], y1: Vec3[A])(x2: Vec3[A], y2: Vec3[A])(implicit F: Fractional[A], T: Trig[A], N: NormedVectorSpace[Vec3[A], A], G0: MultiplicativeSemigroup[Mat3[A]]): AxisAngle[A] = {
+    val r1 = (-rotationToBasis(x1, y1)).matrix
+    val r2 = rotationToBasis(x2, y2).matrix
+    AxisAngle(r2 * r1)
+  }
+
+  //TODO: Call this basisRotation
   def rotationToBasis[A](x: Vec3[A], y: Vec3[A])(implicit F: Fractional[A], 
     T: Trig[A],
     N: NormedVectorSpace[Vec3[A], A]): AxisAngle[A] = {
