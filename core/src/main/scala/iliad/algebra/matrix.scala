@@ -519,10 +519,10 @@ object OrthoMatrix {
 /** Orthogonal matrix */ //TODO: What to do in the case of 
 final class OrthoMatrix[N <: Nat, A] private[iliad](val repr: SVector[A]) extends AnyVal {
 
-  def pad[N1 <: Nat](implicit G: Ring[A], toIntN1: ToInt[N1], toIntN: ToInt[N]): OrthoMatrix[N, A] = 
+  def pad[N1 <: Nat](implicit G: Ring[A], toIntN1: ToInt[N1], toIntN: ToInt[N]): OrthoMatrix[N1, A] = 
     new OrthoMatrix(matrix.pad[N1, N1].repr)
 
-  def pad(n: Nat)(implicit G: Ring[A], toIntN1: ToInt[n.N], toIntN: ToInt[N]): OrthoMatrix[N, A] = pad[n.N]
+  def pad(n: Nat)(implicit G: Ring[A], toIntN1: ToInt[n.N], toIntN: ToInt[N]): OrthoMatrix[n.N, A] = pad[n.N]
 
   def map[B](f: A => B): OrthoMatrix[N, B] = OrthoMatrix(matrix.map(f))
   def ap[B](ff: OrthoMatrix[N, A => B]): OrthoMatrix[N, B] =

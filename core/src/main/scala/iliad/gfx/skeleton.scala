@@ -5,6 +5,7 @@ import scala.{Vector => SVector}
 
 import iliad.algebra._
 import iliad.algebra.syntax.axisAngle._
+import iliad.algebra.syntax.matrix._
 
 import spire._
 import spire.implicits._
@@ -72,34 +73,41 @@ trait Interp[T, A] {
   def interpM(t1: T, s1: Skeleton[A])(t2: T, s2: Skeleton[A]): Interp.AnimM[T, A]
 }
 
-private[gfx] final class Slerp[T : Order, A: Trig : Fractional : Eq](
+private[gfx] final class Slerp[T : Order : Fractional : ConvertableFrom, A: Trig : Fractional : Eq : ConvertableTo](
   implicit N: NormedVectorSpace[Vec3[A], A],
   G0: MultiplicativeSemigroup[Mat3[A]],
   G1: MultiplicativeSemigroup[Mat4[A]]) extends Interp[T, A] {
-
-//  private def interpM(xt: T, yt: T, ts: SVector[Mat4[]]
+ 
+  def translationM(v: Vec3[A]): Mat4[A] = {
+    val o = Ring[A].one
+    val z = Ring[A].zero
+    mat"""$o $z $z ${v.x}
+          $z $o $z ${v.y}
+          $z $z $o ${v.z}
+          $z $z $z $o"""
+  }
 
   def interpM(xt: T, x: Skeleton[A])(yt: T, y: Skeleton[A]): Interp.AnimM[T, A] = {
     x.foldIndexed2(y, List.empty[(Int, AxisAngle[A])]) { (b, idx, xx, yy) =>
       (idx, AxisAngle.basisRotation(xx.x, xx.y)(yy.x, yy.y)) :: b
     } match {
-      case Some(axisAngles) => 
-        val paths = x.pathByIndex
-        val lengths = y.lengthByIndex
-        val size = x.size
-
+      case Some(aa) => 
+        val axisAngles = aa.toMap
+        val paths = x.paths
+        val lengths = y.lengths
+        val size = aa.size
+        val id = Matrix.id[A](4)
         t => {
-
-          val id = G1.zero
-
-          paths.map { p =>
-            p.foldLeft(Matrix)
-          }
-
-          axisAngles(0).matrix
-          //we want to do a matrix transform
-
-          ???
+          val k = (t - xt) / (yt - xt)
+          val ka = ConvertableTo[A].fromType[T](k)
+          paths.map { case (_, p) =>
+            p.foldLeft(id) { (m, idx) =>              
+              val r = ((ka *: axisAngles(idx)).matrix).pad(4)
+              val t: Mat4[A] = translationM(lengths(idx))
+              //TODO: sort out issues!
+              m * t * r.matrix
+            }
+          }.toVector         
         }
       case None => throw new IllegalArgumentException("trying to interpolate between skeletons of a different structure!")  
     }
@@ -117,14 +125,17 @@ trait Skeleton[A] { self =>
     go(b, self)
   }
 
-  def pathByIndex: Map[Int, List[Int]] = {
+  def paths: Map[Int, List[Int]] = {
     val ps = foldPath(List.empty[(Int, List[Int])])((b, i, p) => (i, p) :: b)
     ps.toMap
   }
 
-  def lengthByIndex: Map[Int, A] = {
-    val ls = foldIndexed(List.empty[(Int, A)])((ls, i, b) => (i, b.length) :: ls)
-    ls.toMap
+  def lengths(implicit G: Rng[A]): Map[Int, Vec3[A]] = {
+    val zs = foldIndexed(List.empty[(Int, Vec3[A])]) { (ls, i, b) =>
+      val z = b.x × b.y
+      (i, b.length *: z) :: ls
+    }
+    zs.toMap
   }
 
   def foldPath[B](b: B)(f: (B, Int, List[Int]) => B): B = 
